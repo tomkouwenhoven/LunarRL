@@ -1,2 +1,5 @@
 # LunarRL
-LunarLander experiment 
+LunarLander experiment
+
+
+Tom en Max programmeren.
