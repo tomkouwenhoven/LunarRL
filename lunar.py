@@ -1,21 +1,20 @@
-import time
+import numpy as np
+import random
+import gym
+import os
+import argparse
+
 from matplotlib import pyplot as plt
 from collections import deque
-import numpy as np
-import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
-import random
 
-import gym
-from gym.core import ObservationWrapper
 env_name = "LunarLander-v2"
 env = gym.make(env_name)
 
 rewards = {}
-replay_buffer = deque(maxlen=500000)
+replay_buffer = deque(maxlen=1000000)
 
-num_episodes = 1000
+num_episodes = 50
 
 epsilon = 0.5
 alpha = 0.001
@@ -25,34 +24,27 @@ epsilon_decay = 0.996
 
 minibatch_size = 64
 
-optimizer = tf.keras.optimizers.Adam(alpha)
-model = keras.Sequential()
-model.add(layers.InputLayer(input_shape=(8,)))
-model.add(layers.Dense(128, activation="relu"))
-model.add(layers.Dense(128, activation="relu"))
-model.add(layers.Dense(4, activation="linear"))
-
+model = keras.Sequential([
+    keras.layers.InputLayer(input_shape=(8,)),
+    keras.layers.Dense(128, activation="relu"),
+    keras.layers.Dense(128, activation="relu"),
+    keras.layers.Dense(4, activation="linear"),
+])
+optimizer = keras.optimizers.Adam(alpha)
 model.compile(loss="mean_squared_error", optimizer=optimizer)
 
-def compute_loss(y, y_hat):
-    return tf.square(y - y_hat)
 
-
-model.compile(loss=compute_loss, optimizer=optimizer)
-
-def choose_action(observation):
-    preds = model(observation.reshape((1,8)))
+def choose_action(state):
+    values = model.predict(state.reshape((1,8)))
 
     if np.random.uniform(0,1) > epsilon:
-        action = np.argmax(preds)
+        action = np.argmax(values)
     else:
         action = np.random.randint(0,3)
     return action
 
-def train(samples):
-    # x is 64 experiences with
-    # {state, action, reward, next_state}
 
+def replay(samples):
     states = np.array([i[0] for i in samples])
     actions = np.array([i[1] for i in samples])
     rewards = np.array([i[2] for i in samples])
@@ -64,7 +56,7 @@ def train(samples):
 
     next_q_values = model.predict_on_batch(next_states)
 
-    # calculate target and loss
+    # calculate target
     y = rewards + gamma * np.amax(next_q_values, axis=1) * (1 - finishes)
 
     indexes = np.array([i for i in range(minibatch_size)])
@@ -73,40 +65,86 @@ def train(samples):
 
     model.fit(states, targets, epochs=1, verbose=0)
 
+    global epsilon
+    if epsilon > 0.01:
+        epsilon *= epsilon_decay
 
-for episode in range(num_episodes):
-    cum_reward = 0
+
+def train():
+    # train agent
+    for episode in range(num_episodes):
+        cum_reward = 0
+        state = env.reset()
+
+        for step in range(1000):
+            action = choose_action(state)
+            next_state, reward, done, _ = env.step(action)
+
+            experience = np.array([state, action, reward, next_state, done])
+            replay_buffer.append(experience)
+
+            state = next_state
+
+            cum_reward += reward
+
+            if len(replay_buffer) > minibatch_size:
+                samples = random.sample(replay_buffer, minibatch_size)
+                replay(np.array(samples))
+
+            if episode % 5 == 0:
+                env.render(mode="rgb_array")
+
+            if done:
+                rewards[episode] = cum_reward
+                break
+
+
+        # pick random minibatch to train model.
+        print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
+
+    if os.path.exists("models"):
+        os.mkdir("models")
+
+    model.save("models/dqn_lunarlander.h5")
+
+    plt.plot(rewards.values())
+    plt.show()
+
+
+def play():
+    if not os.path.exists("models/dqn_lunarlander.h5"):
+        print("Model doesn't exist. Exiting...")
+        return
+
+    model.load_weights("models/dqn_lunarlander.h5")
+
+    # without training
     state = env.reset()
 
     for step in range(1000):
         action = choose_action(state)
-        next_state, reward, done, info = env.step(action)
 
-        experience = np.array([state, action, reward, next_state, done])
-        replay_buffer.append(experience)
-
+        next_state, _, done, _ = env.step(action)
         state = next_state
-
-        cum_reward += reward
-
-        if episode % 100 == 0:
-            arr = env.render(mode="rgb_array")
+        env.render(mode="rgb_array")
 
         if done:
-          rewards[episode] = cum_reward
-          break
-
-    if epsilon > 0.01:
-        epsilon *= epsilon_decay
-
-    # pick random minibatch to train model.
-    print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
-
-    if len(replay_buffer) > minibatch_size:
-        train(np.array(random.sample(replay_buffer, minibatch_size)))
+            break
 
 
+def main(args=None):
+    parser = argparse.ArgumentParser(description='Process settings for dqn lunarlander.')
+    parser.add_argument('--mode', dest='mode',
+                        type=str, default=train,
+                        help='choose mode for agent, train or play')
 
-plt.plot(rewards.values())
-plt.show()
-    # time.sleep(0.1)
+    args = parser.parse_args()
+
+    if args.mode == "train":
+        train()
+    elif args.mode == "play":
+        play()
+
+
+if __name__ == "__main__":
+    main()
