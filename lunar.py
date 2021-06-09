@@ -14,7 +14,7 @@ env = gym.make(env_name)
 rewards = {}
 replay_buffer = deque(maxlen=1000000)
 
-num_episodes = 50
+num_episodes = 1000
 
 epsilon = 0.5
 alpha = 0.001
@@ -34,13 +34,16 @@ optimizer = keras.optimizers.Adam(alpha)
 model.compile(loss="mean_squared_error", optimizer=optimizer)
 
 
-def choose_action(state):
+def choose_action(state, mode):
     values = model.predict(state.reshape((1,8)))
 
-    if np.random.uniform(0,1) > epsilon:
+    if mode == "play":
         action = np.argmax(values)
     else:
-        action = np.random.randint(0,3)
+        if np.random.uniform(0,1) > epsilon:
+            action = np.argmax(values)
+        else:
+            action = np.random.randint(0,3)
     return action
 
 
@@ -77,7 +80,7 @@ def train():
         state = env.reset()
 
         for step in range(1000):
-            action = choose_action(state)
+            action = choose_action(state, "train")
             next_state, reward, done, _ = env.step(action)
 
             experience = np.array([state, action, reward, next_state, done])
@@ -122,7 +125,7 @@ def play():
     state = env.reset()
 
     for step in range(1000):
-        action = choose_action(state)
+        action = choose_action(state, "play")
 
         next_state, _, done, _ = env.step(action)
         state = next_state
