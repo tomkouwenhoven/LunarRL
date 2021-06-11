@@ -17,7 +17,7 @@ env = gym.make(env_name)
 rewards = {}
 replay_buffer = deque(maxlen=1000000)
 
-num_episodes = 1
+num_episodes = 5
 
 epsilon = 0.5
 alpha = 0.001
@@ -28,15 +28,15 @@ epsilon_decay = 0.996
 minibatch_size = 64
 
 actions = [
-    [-1.0, 0, 0], #left
-    [1.0, 0, 0], #right
-    [0, 0, 0.8], #brake
-    [0, 1.0, 0], #accelerate
-    [0, 0, 0], #nothing
+    [-1.0, 0.0, 0.0], #left
+    [ 1.0, 0.0, 0.0], #right
+    [ 0.0, 0.0, 0.8], #brake
+    [ 0.0, 1.0, 0.0], #accelerate
+    [ 0.0, 0.0, 0.0], #nothing
 ]
 
 model = keras.Sequential([
-    keras.layers.Input(shape=(96,96,1)),
+    keras.layers.Input(shape=(96,96,3)),
     keras.layers.Conv2D(32, kernel_size=8, padding='same', activation="relu"),
     keras.layers.MaxPooling2D(pool_size=(2,2)),
     keras.layers.Conv2D(64, kernel_size=5, padding='same', activation="relu"),
@@ -54,9 +54,8 @@ model.compile(loss="mean_squared_error", optimizer=optimizer)
 
 
 def choose_action(state, mode):
-    grey_state = np.mean(state, axis=2)
+    values = model.predict(state.reshape((1,96,96,3)))
 
-    values = model.predict(grey_state.reshape((1,96,96,1)))
     if mode == "play":
         idx = np.argmax(np.squeeze(values))
     else:
@@ -66,7 +65,7 @@ def choose_action(state, mode):
         else:
             idx = np.random.randint(0,4)
 
-    return actions[idx]
+    return actions[idx], idx
 
 
 def replay(samples):
@@ -101,47 +100,52 @@ def train():
         cum_reward = 0
         state = env.reset()
 
-        for step in range(1000):
-            action = choose_action(state, "train")
+        for step in range(10):
+            action, action_idx = choose_action(state, "train")
+
             next_state, reward, done, _ = env.step(action)
 
-            # experience = np.array([state, action, reward, next_state, done])
-            # replay_buffer.append(experience)
+            experience = np.array([state, action_idx, reward, next_state, done])
+            replay_buffer.append(experience)
 
             state = next_state
 
             cum_reward += reward
 
-            # if len(replay_buffer) > minibatch_size:
-            #     samples = random.sample(replay_buffer, minibatch_size)
-                # replay(np.array(samples))
+            if len(replay_buffer) > minibatch_size:
+                samples = random.sample(replay_buffer, minibatch_size)
+                replay(np.array(samples))
 
-            # if episode % 5 == 0:
-            env.render(mode="rgb_array")
-
+            if episode % 5 == 0:
+                env.render()
+            
+            rewards[episode] = cum_reward
+            
             if done:
-                rewards[episode] = cum_reward
                 break
-
+             
 
         # pick random minibatch to train model.
         print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
+    
+    model_dir = os.path.join(os.getcwd(), "RL", "LunarRL", "models")
+    if os.path.exists(model_dir):
+        os.mkdir(model_dir)
 
-    # if os.path.exists("models"):
-    #     os.mkdir("models")
-
-    # model.save("models/dqn_racecar.h5")
+    model.save(os.path.join(model_dir, "dqn_racecar.h5"))
 
     plt.plot(rewards.values())
     plt.show()
 
 
 def play():
-    # if not os.path.exists("models/dqn_racecar.h5"):
-    #     print("Model doesn't exist. Exiting...")
-    #     return
+    model_path = os.path.join(os.getcwd(), "RL", "LunarRL", "models", "dqn_racecar.h5")
 
-    # model.load_weights("models/dqn_racecar.h5")
+    if not os.path.exists(model_path):
+        print("Model doesn't exist. Exiting...")
+        return
+
+    model.load_weights(model_path)
 
     # without training
     state = env.reset()
@@ -151,7 +155,7 @@ def play():
 
         next_state, _, done, _ = env.step(action)
         state = next_state
-        env.render(mode="rgb_array")
+        env.render()
 
         if done:
             break
