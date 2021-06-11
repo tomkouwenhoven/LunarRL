@@ -7,14 +7,17 @@ import argparse
 from matplotlib import pyplot as plt
 from collections import deque
 from tensorflow import keras
+from tensorflow.python.keras.backend import conv2d
+from tensorflow.python.keras.layers.convolutional import Conv2D
+from tensorflow.python.keras.layers.pooling import MaxPooling2D
 
-env_name = "LunarLander-v2"
+env_name = "CarRacing-v0"
 env = gym.make(env_name)
 
 rewards = {}
 replay_buffer = deque(maxlen=1000000)
 
-num_episodes = 1000
+num_episodes = 1
 
 epsilon = 0.5
 alpha = 0.001
@@ -24,27 +27,46 @@ epsilon_decay = 0.996
 
 minibatch_size = 64
 
+actions = [
+    [-1.0, 0, 0], #left
+    [1.0, 0, 0], #right
+    [0, 0, 0.8], #brake
+    [0, 1.0, 0], #accelerate
+    [0, 0, 0], #nothing
+]
+
 model = keras.Sequential([
-    keras.layers.InputLayer(input_shape=(8,)),
-    keras.layers.Dense(128, activation="relu"),
-    keras.layers.Dense(128, activation="relu"),
-    keras.layers.Dense(4, activation="linear"),
+    keras.layers.Input(shape=(96,96,1)),
+    keras.layers.Conv2D(32, kernel_size=8, padding='same', activation="relu"),
+    keras.layers.MaxPooling2D(pool_size=(2,2)),
+    keras.layers.Conv2D(64, kernel_size=5, padding='same', activation="relu"),
+    keras.layers.MaxPooling2D(pool_size=(2,2)),
+    keras.layers.Conv2D(64, kernel_size=3, padding='same', activation="relu"),
+    keras.layers.MaxPooling2D(pool_size=(2,2)),
+    keras.layers.Flatten(),
+    keras.layers.Dense(64, activation="linear"),
+    keras.layers.Dense(5, activation="linear"),
 ])
+
 optimizer = keras.optimizers.Adam(alpha)
 model.compile(loss="mean_squared_error", optimizer=optimizer)
+# model.summary()
 
 
 def choose_action(state, mode):
-    values = model.predict(state.reshape((1,8)))
+    grey_state = np.mean(state, axis=2)
 
+    values = model.predict(grey_state.reshape((1,96,96,1)))
     if mode == "play":
-        action = np.argmax(values)
+        idx = np.argmax(np.squeeze(values))
     else:
         if np.random.uniform(0,1) > epsilon:
-            action = np.argmax(values)
+            idx = np.argmax(np.squeeze(values))
+            
         else:
-            action = np.random.randint(0,3)
-    return action
+            idx = np.random.randint(0,4)
+
+    return actions[idx]
 
 
 def replay(samples):
@@ -83,19 +105,19 @@ def train():
             action = choose_action(state, "train")
             next_state, reward, done, _ = env.step(action)
 
-            experience = np.array([state, action, reward, next_state, done])
-            replay_buffer.append(experience)
+            # experience = np.array([state, action, reward, next_state, done])
+            # replay_buffer.append(experience)
 
             state = next_state
 
             cum_reward += reward
 
-            if len(replay_buffer) > minibatch_size:
-                samples = random.sample(replay_buffer, minibatch_size)
-                replay(np.array(samples))
+            # if len(replay_buffer) > minibatch_size:
+            #     samples = random.sample(replay_buffer, minibatch_size)
+                # replay(np.array(samples))
 
-            if episode % 5 == 0:
-                env.render(mode="rgb_array")
+            # if episode % 5 == 0:
+            env.render(mode="rgb_array")
 
             if done:
                 rewards[episode] = cum_reward
@@ -105,21 +127,21 @@ def train():
         # pick random minibatch to train model.
         print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
 
-    if os.path.exists("models"):
-        os.mkdir("models")
+    # if os.path.exists("models"):
+    #     os.mkdir("models")
 
-    model.save("models/dqn_lunarlander.h5")
+    # model.save("models/dqn_racecar.h5")
 
     plt.plot(rewards.values())
     plt.show()
 
 
 def play():
-    if not os.path.exists("models/dqn_lunarlander.h5"):
-        print("Model doesn't exist. Exiting...")
-        return
+    # if not os.path.exists("models/dqn_racecar.h5"):
+    #     print("Model doesn't exist. Exiting...")
+    #     return
 
-    model.load_weights("models/dqn_lunarlander.h5")
+    # model.load_weights("models/dqn_racecar.h5")
 
     # without training
     state = env.reset()
@@ -138,7 +160,7 @@ def play():
 def main(args=None):
     parser = argparse.ArgumentParser(description='Process settings for dqn lunarlander.')
     parser.add_argument('--mode', dest='mode',
-                        type=str, default='play',
+                        type=str, default='train',
                         help='choose mode for agent, train or play')
 
     args = parser.parse_args()
