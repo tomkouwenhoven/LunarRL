@@ -29,9 +29,13 @@ minibatch_size = 64
 
 actions = [
     [-1.0, 0.0, 0.0], #left
+    [-1.0, 0.3, 0.0], #soft left
     [ 1.0, 0.0, 0.0], #right
-    [ 0.0, 0.0, 0.8], #brake
+    [ 1.0, 0.3, 0.0], #soft right
+    [ 0.0, 0.0, 1.0], #brake
+    [ 0.0, 0.0, 0.5], #soft brake
     [ 0.0, 1.0, 0.0], #accelerate
+    [ 0.0, 1.0, 0.8], #decelerate
     [ 0.0, 0.0, 0.0], #nothing
 ]
 
@@ -129,7 +133,8 @@ def train():
         print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
     
     model_dir = os.path.join(os.getcwd(), "RL", "LunarRL", "models")
-    if os.path.exists(model_dir):
+
+    if not os.path.exists(model_dir):
         os.mkdir(model_dir)
 
     model.save(os.path.join(model_dir, "dqn_racecar.h5"))
@@ -151,8 +156,8 @@ def play():
     state = env.reset()
 
     for step in range(1000):
-        action = choose_action(state, "play")
-
+        action, action_idx = choose_action(state, "play")
+        print(action)
         next_state, _, done, _ = env.step(action)
         state = next_state
         env.render()
