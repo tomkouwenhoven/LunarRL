@@ -36,7 +36,7 @@ actions = [
 ]
 
 model = keras.Sequential([
-    keras.layers.Input(shape=(96,96,3)),
+    keras.layers.InputLayer(input_shape=(96,96,3)),
     keras.layers.Conv2D(32, kernel_size=8, padding='same', activation="relu"),
     keras.layers.MaxPooling2D(pool_size=(2,2)),
     keras.layers.Conv2D(64, kernel_size=5, padding='same', activation="relu"),
@@ -100,12 +100,13 @@ def train():
         cum_reward = 0
         state = env.reset()
 
-        for step in range(10):
+        for step in range(1000):
+            print(f"Step: {step:04}", end="\r")
             action, action_idx = choose_action(state, "train")
 
             next_state, reward, done, _ = env.step(action)
 
-            experience = np.array([state, action_idx, reward, next_state, done])
+            experience = np.array([state, action_idx, reward, next_state, done], dtype='object')
             replay_buffer.append(experience)
 
             state = next_state
@@ -116,8 +117,8 @@ def train():
                 samples = random.sample(replay_buffer, minibatch_size)
                 replay(np.array(samples))
 
-            if episode % 5 == 0:
-                env.render()
+            # if episode % 5 == 0:
+            #   env.render()
             
             rewards[episode] = cum_reward
             
@@ -129,7 +130,7 @@ def train():
         print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
     
     model_dir = os.path.join(os.getcwd(), "RL", "LunarRL", "models")
-    if os.path.exists(model_dir):
+    if not os.path.exists(model_dir):
         os.mkdir(model_dir)
 
     model.save(os.path.join(model_dir, "dqn_racecar.h5"))
