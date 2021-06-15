@@ -17,8 +17,6 @@ env = gym.make(env_name)
 rewards = {}
 replay_buffer = deque(maxlen=1000000)
 
-num_episodes = 5
-
 epsilon = 0.5
 alpha = 0.001
 gamma = 0.99
@@ -98,7 +96,7 @@ def replay(samples):
         epsilon *= epsilon_decay
 
 
-def train():
+def train(num_episodes):
     # train agent
     for episode in range(num_episodes):
         cum_reward = 0
@@ -134,17 +132,24 @@ def train():
         print(f"\nepisode #{episode:05} - epsilon: {epsilon} - reward: {cum_reward}")
     
     model_dir = os.path.join(os.getcwd(), "RL", "LunarRL", "models")
+    figures_dir = os.path.join(os.getcwd(), "RL", "LunarRL", "figures")
+    
+    if not os.path.exists(figures_dir):
+        os.mkdir(figures_dir)
+
     if not os.path.exists(model_dir):
         os.mkdir(model_dir)
 
     model.save(os.path.join(model_dir, "dqn_racecar.h5"))
 
     plt.plot(rewards.values())
-    plt.show()
+    plt.savefig(os.path.join(figures_dir, "dqn_racecar.png"),
+            dpi=300, 
+            format='png')
 
 
 def play():
-    model_path = os.path.join(os.getcwd(), "RL", "LunarRL", "models", "dqn_racecar.h5")
+    model_path = os.path.join(os.getcwd(), "RL", "LunarRL", "models", "dqn_racecar_v2.h5")
 
     if not os.path.exists(model_path):
         print("Model doesn't exist. Exiting...")
@@ -171,11 +176,14 @@ def main(args=None):
     parser.add_argument('--mode', dest='mode',
                         type=str, default='train',
                         help='choose mode for agent, train or play')
+    parser.add_argument('--episodes', dest='num_episodes',
+                        type=int, default=100,
+                        help='choose number of episodes to train or play')
 
     args = parser.parse_args()
 
     if args.mode == "train":
-        train()
+        train(args.num_episodes)
     elif args.mode == "play":
         play()
 
